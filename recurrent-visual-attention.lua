@@ -1,5 +1,7 @@
 require 'dp'
 require 'rnn'
+dofile 'SpatialGlimpse1D.lua'
+dofile 'MultiVRReward.lua'
 
 -- References :
 -- A. http://papers.nips.cc/paper/5542-recurrent-models-of-visual-attention.pdf
@@ -21,8 +23,8 @@ cmd:option('--saturateEpoch', 800, 'epoch at which linear decayed LR will reach 
 cmd:option('--momentum', 0.9, 'momentum')
 cmd:option('--maxOutNorm', -1, 'max norm each layers output neuron weights')
 cmd:option('--cutoffNorm', -1, 'max l2-norm of contatenation of all gradParam tensors')
-cmd:option('--batchSize', 20, 'number of examples per batch')
-cmd:option('--cuda', false, 'use CUDA')
+cmd:option('--batchSize', 1, 'number of examples per batch')
+cmd:option('--cuda', true, 'use CUDA')
 cmd:option('--useDevice', 1, 'sets the device (GPU) to use')
 cmd:option('--maxEpoch', 2000, 'maximum number of epochs to run')
 cmd:option('--maxTries', 100, 'maximum number of epochs to try to find a better local minima for early-stopping')
@@ -34,25 +36,25 @@ cmd:option('--silent', false, 'dont print anything to stdout')
 
 --[[ reinforce ]]--
 cmd:option('--rewardScale', 1, "scale of positive reward (negative is 0)")
-cmd:option('--unitPixels', 13, "the locator unit (1,1) maps to pixels (13,13), or (-1,-1) maps to (-13,-13)")
+cmd:option('--unitPixels', 325000, "the locator unit (1,1) maps to pixels (13,13), or (-1,-1) maps to (-13,-13)")
 cmd:option('--locatorStd', 0.11, 'stdev of gaussian location sampler (between 0 and 1) (low values may cause NaNs)')
 cmd:option('--stochastic', false, 'Reinforce modules forward inputs stochastically during evaluation')
 
 --[[ glimpse layer ]]--
 cmd:option('--glimpseHiddenSize', 128, 'size of glimpse hidden layer')
-cmd:option('--glimpsePatchSize', 8, 'size of glimpse patch at highest res (height = width)')
+cmd:option('--glimpsePatchSize', {2,180}, 'size of glimpse patch at highest res {height, width}')
 cmd:option('--glimpseScale', 2, 'scale of successive patches w.r.t. original input image')
-cmd:option('--glimpseDepth', 1, 'number of concatenated downscaled patches')
+cmd:option('--glimpseDepth', 2, 'number of concatenated downscaled patches')
 cmd:option('--locatorHiddenSize', 128, 'size of locator hidden layer')
 cmd:option('--imageHiddenSize', 256, 'size of hidden layer combining glimpse and locator hiddens')
 
 --[[ recurrent layer ]]--
-cmd:option('--rho', 7, 'back-propagate through time (BPTT) for rho time-steps')
+cmd:option('--rho', 1796, 'back-propagate through time (BPTT) for rho time-steps')
 cmd:option('--hiddenSize', 256, 'number of hidden units used in Simple RNN.')
 cmd:option('--FastLSTM', false, 'use LSTM instead of linear layer')
 
 --[[ data ]]--
-cmd:option('--dataset', 'Mnist', 'which dataset to use : Mnist | TranslattedMnist | etc')
+cmd:option('--dataset', 'MIT-BIH', 'which dataset to use : Mnist | TranslattedMnist | etc')
 cmd:option('--trainEpochSize', -1, 'number of train examples seen between each epoch')
 cmd:option('--validEpochSize', -1, 'number of valid examples used for early stopping and cross-validation')
 cmd:option('--noTest', false, 'dont propagate through the test set')
@@ -77,7 +79,7 @@ if opt.dataset == 'TranslatedMnist' then
       opt.overwrite
    )
 else
-   ds = dp[opt.dataset]()
+   ds = torch.load('HalfData')
 end
 
 --[[Saved experiment]]--
@@ -100,16 +102,17 @@ end
 
 --[[Model]]--
 
+glimpseAxes = 1
 -- glimpse network (rnn input layer)
 locationSensor = nn.Sequential()
 locationSensor:add(nn.SelectTable(2))
-locationSensor:add(nn.Linear(2, opt.locatorHiddenSize))
+locationSensor:add(nn.Linear(glimpseAxes, opt.locatorHiddenSize))
 locationSensor:add(nn[opt.transfer]())
 
 glimpseSensor = nn.Sequential()
-glimpseSensor:add(nn.DontCast(nn.SpatialGlimpse(opt.glimpsePatchSize, opt.glimpseDepth, opt.glimpseScale):float(),true))
+glimpseSensor:add(nn.DontCast(nn.SpatialGlimpse1D(opt.glimpsePatchSize, opt.glimpseDepth, opt.glimpseScale):float(),true))
 glimpseSensor:add(nn.Collapse(3))
-glimpseSensor:add(nn.Linear(ds:imageSize('c')*(opt.glimpsePatchSize^2)*opt.glimpseDepth, opt.glimpseHiddenSize))
+glimpseSensor:add(nn.Linear(ds:imageSize('c')*(opt.glimpsePatchSize[1]*opt.glimpsePatchSize[2])*opt.glimpseDepth, opt.glimpseHiddenSize))
 glimpseSensor:add(nn[opt.transfer]())
 
 glimpse = nn.Sequential()
@@ -130,17 +133,14 @@ end
 -- recurrent neural network
 rnn = nn.Recurrent(opt.hiddenSize, glimpse, recurrent, nn[opt.transfer](), 99999)
 
-imageSize = ds:imageSize('h')
-assert(ds:imageSize('h') == ds:imageSize('w'))
-
 -- actions (locator)
 locator = nn.Sequential()
-locator:add(nn.Linear(opt.hiddenSize, 2))
+locator:add(nn.Linear(opt.hiddenSize, glimpseAxes))
 locator:add(nn.HardTanh()) -- bounds mean between -1 and 1
 locator:add(nn.ReinforceNormal(2*opt.locatorStd, opt.stochastic)) -- sample from normal, uses REINFORCE learning rule
 assert(locator:get(3).stochastic == opt.stochastic, "Please update the dpnn package : luarocks install dpnn")
 locator:add(nn.HardTanh()) -- bounds sample between -1 and 1
-locator:add(nn.MulConstant(opt.unitPixels*2/ds:imageSize("h")))
+locator:add(nn.MulConstant(opt.unitPixels*2/ds:imageSize("w")))
 
 attention = nn.RecurrentAttention(rnn, locator, opt.rho, {opt.hiddenSize})
 
@@ -150,9 +150,17 @@ agent:add(nn.Convert(ds:ioShapes(), 'bchw'))
 agent:add(attention)
 
 -- classifier :
-agent:add(nn.SelectTable(-1))
-agent:add(nn.Linear(opt.hiddenSize, #ds:classes()))
-agent:add(nn.LogSoftMax())
+-- agent:add(nn.SelectTable(-1))
+finalStep = nn.Sequential()
+finalStep:add(nn.Linear(opt.hiddenSize, #ds:classes()))
+finalStep:add(nn.LogSoftMax())
+
+multipleActions = nn.ParallelTable()
+for i=1,opt.rho do
+  multipleActions:add( finalStep:clone('weight','bias','gradWeight','gradBias') )
+end
+agent:add( multipleActions )
+agent:add( nn.JoinTable(1,1) )
 
 -- add the baseline reward predictor
 seq = nn.Sequential()
@@ -176,7 +184,7 @@ opt.decayFactor = (opt.minLR - opt.learningRate)/opt.saturateEpoch
 train = dp.Optimizer{
    loss = nn.ParallelCriterion(true)
       :add(nn.ModuleCriterion(nn.ClassNLLCriterion(), nil, nn.Convert())) -- BACKPROP
-      :add(nn.ModuleCriterion(nn.VRClassReward(agent, opt.rewardScale), nil, nn.Convert())) -- REINFORCE
+      :add(nn.ModuleCriterion(nn.MultiVRReward(agent, opt.rewardScale), nil, nn.Convert())) -- REINFORCE
    ,
    epoch_callback = function(model, report) -- called every epoch
       if report.epoch > 0 then

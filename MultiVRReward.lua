@@ -1,15 +1,15 @@
 ------------------------------------------------------------------------
---[[ VRClassReward ]]--
+--[[ MultiVRReward ]]--
 -- Variance reduced classification reinforcement criterion.
 -- input : {class prediction, baseline reward}
 -- Reward is 1 for success, Reward is 0 otherwise.
 -- reward = scale*(Reward - baseline) where baseline is 2nd input element
 -- Note : for RNNs with R = 1 for last step in sequence, encapsulate it
--- in nn.ModuleCriterion(VRClassReward, nn.SelectTable(-1))
+-- in nn.ModuleCriterion(MultiVRReward, nn.SelectTable(-1))
 ------------------------------------------------------------------------
-local VRClassReward, parent = torch.class("nn.VRClassReward", "nn.Criterion")
+local MultiVRReward, parent = torch.class("nn.MultiVRReward", "nn.Criterion")
 
-function VRClassReward:__init(module, scale, criterion)
+function MultiVRReward:__init(module, scale, criterion)
    parent.__init(self)
    self.module = module -- so it can call module:reinforce(reward)
    self.scale = scale or 1 -- scale of reward
@@ -18,14 +18,14 @@ function VRClassReward:__init(module, scale, criterion)
    self.gradInput = {torch.Tensor()}
 end
 
-function VRClassReward:updateOutput(input, target)
+function MultiVRReward:updateOutput(input, target)
    assert(torch.type(input) == 'table')
-   local input = self:toBatch(input[1], 1)
+   local input = self:toBatch(input[1], 2)
    self._maxVal = self._maxVal or input.new()
    self._maxIdx = self._maxIdx or torch.type(input) == 'torch.CudaTensor' and input.new() or torch.LongTensor()
    
    -- max class value is class prediction
-   self._maxVal:max(self._maxIdx, input, 2)
+   self._maxVal:max(self._maxIdx, input, 3)
    if torch.type(self._maxIdx) ~= torch.type(target) then
       self._target = self._target or self._maxIdx.new()
       self._target:resize(target:size()):copy(target)
@@ -34,7 +34,7 @@ function VRClassReward:updateOutput(input, target)
    
    -- reward = scale when correctly classified
    self._reward = self._maxIdx.new()
-   self._reward:eq(self._maxIdx, target)
+   self._reward:eq(self._maxIdx, target):sum(2)
    self.reward = self.reward or input.new()
    self.reward:resize(self._reward:size(1)):copy(self._reward)
    self.reward:mul(self.scale)
@@ -47,7 +47,7 @@ function VRClassReward:updateOutput(input, target)
    return self.output
 end
 
-function VRClassReward:updateGradInput(inputTable, target)
+function MultiVRReward:updateGradInput(inputTable, target)
    local input = self:toBatch(inputTable[1], 1)
    local baseline = self:toBatch(inputTable[2], 1)
    
@@ -71,7 +71,7 @@ function VRClassReward:updateGradInput(inputTable, target)
    return self.gradInput
 end
 
-function VRClassReward:type(type)
+function MultiVRReward:type(type)
    self._maxVal = nil
    self._maxIdx = nil
    self._target = nil
