@@ -121,3 +121,5 @@ test = dp.DataSet{inputs=testInput,targets=testTarget,which_set='test'}
 ds = dp.DataSource{train_set=train,valid_set=valid,test_set=test}
 ds:classes{'Normal','Arrhythmia'}
 
+torch.save('HalfData',ds)
+
