@@ -20,6 +20,8 @@ end
 
 function MultiVRReward:updateOutput(input, target)
    assert(torch.type(input) == 'table')
+print(input[1]:size())
+print(target:size())
    local input = self:toBatch(input[1], 2)
    self._maxVal = self._maxVal or input.new()
    self._maxIdx = self._maxIdx or torch.type(input) == 'torch.CudaTensor' and input.new() or torch.LongTensor()
