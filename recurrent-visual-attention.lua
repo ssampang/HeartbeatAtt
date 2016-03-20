@@ -50,7 +50,7 @@ cmd:option('--imageHiddenSize', 256, 'size of hidden layer combining glimpse and
 
 --[[ recurrent layer ]]--
 cmd:option('--rho', 1796, 'back-propagate through time (BPTT) for rho time-steps')
-cmd:option('--hiddenSize', 256, 'number of hidden units used in Simple RNN.')
+cmd:option('--hiddenSize', 64, 'number of hidden units used in Simple RNN.')
 cmd:option('--FastLSTM', false, 'use LSTM instead of linear layer')
 
 --[[ data ]]--
@@ -159,11 +159,12 @@ classifier:add(nn.LogSoftMax())
 
 -- we don't want to train 1796 linear layers, so have them all share weights
 
-multipleActions = nn.ParallelTable()
-for i=1,opt.rho do
-  multipleActions:add( classifier:clone('weight','bias','gradWeight','gradBias') )
-end
-agent:add( multipleActions )
+--multipleActions = nn.ParallelTable()
+--for i=1,opt.rho do
+--  multipleActions:add( classifier:clone('weight','bias','gradWeight','gradBias') )
+--end
+--agent:add( multipleActions )
+agent:add( nn.Sequencer( classifier ) )
 agent:add( nn.JoinTable(1,1) )
 
 -- add the baseline reward predictor
@@ -187,17 +188,17 @@ opt.decayFactor = (opt.minLR - opt.learningRate)/opt.saturateEpoch
 
 -- not sure how to backprop multiple actions to the same network...but this is my best guess.
 
-backprop = nn.ParallelCriterion()
-for i=1,opt.rho do
-  backprop:add( nn.ClassNLLCriterion())
-end
+--backprop = nn.ParallelCriterion()
+--for i=1,opt.rho do
+--  backprop:add( nn.ClassNLLCriterion())
+--end
 
 train = dp.Optimizer{
 -- split up each action into elements of a table, and split up each target into elements of a table, and apply ClassNLLCriterion to each
 -- pair of elements
 
    loss = nn.ParallelCriterion(true)
-      :add(nn.ModuleCriterion(backprop, nn.SplitTable(1,2), nn.SplitTable(1,1))) -- BACKPROP
+      :add(nn.ModuleCriterion(nn.SequencerCriterion(nn.ClassNLLCriterion), nn.SplitTable(1,2), nn.SplitTable(1,1))) -- BACKPROP
       :add(nn.ModuleCriterion(nn.MultiVRReward(agent, opt.rewardScale), nil, nn.Convert())) -- REINFORCE
    ,
    epoch_callback = function(model, report) -- called every epoch
