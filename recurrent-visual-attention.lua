@@ -1,5 +1,6 @@
 require 'dp'
 require 'rnn'
+require 'cutorch'
 dofile 'SpatialGlimpse1D.lua'
 dofile 'MultiVRReward.lua'
 

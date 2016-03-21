@@ -1,4 +1,5 @@
 require 'dp'
+require 'cutorch'
 
 records = {100,101,102,103,104,105,106,107,108,109,111,112,113,114,115,116,118,119,121,122} --,117,123,124 --,200,201,202,203,205,207,208,209,210,212,213,214,215,217,219,220,221,222,223,228,230,231,232,233,234}
 wavePrefix = '/home/sid/Projects/HeartbeatNN/preprocessing/waveforms/'
@@ -90,7 +91,7 @@ end
 size = #records
 shuffle = torch.randperm(size)
 input = torch.FloatTensor(size,1,650000,2)
-target = torch.IntTensor(size,seqLen)
+target = torch.CudaTensor(size,seqLen)
 
 for i=1,size do
   local idx = shuffle[i]
