@@ -20,8 +20,6 @@ end
 
 function MultiVRReward:updateOutput(input, target)
    assert(torch.type(input) == 'table')
-print(input[1]:size())
-print(target:size())
    local input = self:toBatch(input[1], 2)
    self._maxVal = self._maxVal or input.new()
    self._maxIdx = self._maxIdx or torch.type(input) == 'torch.CudaTensor' and input.new() or torch.LongTensor()
@@ -38,7 +36,7 @@ print(target:size())
    self._reward = self._maxIdx.new()
    self._reward:eq(self._maxIdx, target):sum(2)
    self.reward = self.reward or input.new()
-   self.reward:resize(self._reward:size(1)):copy(self._reward)
+   self.reward:resize(self._reward:size(2)):copy(self._reward)
    self.reward:mul(self.scale)
    
    -- loss = -sum(reward)

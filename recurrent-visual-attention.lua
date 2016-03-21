@@ -49,7 +49,7 @@ cmd:option('--locatorHiddenSize', 128, 'size of locator hidden layer')
 cmd:option('--imageHiddenSize', 256, 'size of hidden layer combining glimpse and locator hiddens')
 
 --[[ recurrent layer ]]--
-cmd:option('--rho', 1796, 'back-propagate through time (BPTT) for rho time-steps')
+cmd:option('--rho', 100, 'back-propagate through time (BPTT) for rho time-steps')
 cmd:option('--hiddenSize', 64, 'number of hidden units used in Simple RNN.')
 cmd:option('--FastLSTM', false, 'use LSTM instead of linear layer')
 
@@ -79,7 +79,7 @@ if opt.dataset == 'TranslatedMnist' then
       opt.overwrite
    )
 else
-   ds = torch.load('HalfData')
+   ds = torch.load('Len100')
 end
 
 --[[Saved experiment]]--
@@ -131,7 +131,7 @@ end
 
 
 -- recurrent neural network
-rnn = nn.Recurrent(opt.hiddenSize, glimpse, recurrent, nn[opt.transfer](), 99999)
+rnn = nn.Recurrent(opt.hiddenSize, glimpse, recurrent, nn[opt.transfer](), 100)
 
 -- actions (locator)
 locator = nn.Sequential()
@@ -165,7 +165,7 @@ classifier:add(nn.LogSoftMax())
 --end
 --agent:add( multipleActions )
 agent:add( nn.Sequencer( classifier ) )
-agent:add( nn.JoinTable(1,1) )
+agent:add( nn.JoinTable(1,2) )
 
 -- add the baseline reward predictor
 seq = nn.Sequential()
@@ -198,7 +198,7 @@ train = dp.Optimizer{
 -- pair of elements
 
    loss = nn.ParallelCriterion(true)
-      :add(nn.ModuleCriterion(nn.SequencerCriterion(nn.ClassNLLCriterion), nn.SplitTable(1,2), nn.SplitTable(1,1))) -- BACKPROP
+      :add(nn.ModuleCriterion(nn.SequencerCriterion(nn.ClassNLLCriterion()), nn.SplitTable(1,2), nn.SplitTable(1,1))) -- BACKPROP
       :add(nn.ModuleCriterion(nn.MultiVRReward(agent, opt.rewardScale), nil, nn.Convert())) -- REINFORCE
    ,
    epoch_callback = function(model, report) -- called every epoch

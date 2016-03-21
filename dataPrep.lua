@@ -1,6 +1,10 @@
 require 'dp'
 
 records = {100,101,102,103,104,105,106,107,108,109,111,112,113,114,115,116,118,119,121,122} --,117,123,124 --,200,201,202,203,205,207,208,209,210,212,213,214,215,217,219,220,221,222,223,228,230,231,232,233,234}
+wavePrefix = '/home/sid/Projects/HeartbeatNN/preprocessing/waveforms/'
+AnnPrefix = '/home/sid/Projects/HeartbeatNN/preprocessing/annotations/'
+validRatio = 0.2
+seqLen = 100
 
 function split(str, pat)
    local t = {}  -- NOTE: use {n = 0} in Lua-5.0
@@ -33,9 +37,6 @@ function removeSpaces(tb)
   return tb
 end
 
-wavePrefix = '/home/sid/Projects/HeartbeatNN/preprocessing/waveforms/'
-AnnPrefix = '/home/sid/Projects/HeartbeatNN/preprocessing/annotations/'
-
 waves = {}
 anns = {}
 
@@ -52,18 +53,18 @@ for i=1,#records do
   -- we limit the number of heartbeats to 1796 per record because it's convenient to have records of uniform length for training
   -- and empirically, disregarding the 3 records with <1796 beats and limiting all other records to 1796 beats yields the most number of beats
 
-  if #ann >= 1796 then
+  if #ann >= seqLen then
     waveTensor = torch.Tensor(#wave-2,2):fill(0)
-    annTensor = torch.Tensor(1796,1)
+    annTensor = torch.Tensor(seqLen,1)
 
-    for j=1,1796 do
+    for j=1,seqLen do
       local val = removeSpaces(split(ann[j],' '))[4] == 'N' and 1 or 2
       annTensor[j] = val
     end
       anns[ records[i] ] = annTensor
 
-    if ann[1797] then
-      lastTime = tonumber(removeSpaces(split(ann[1797],' '))[1])
+    if ann[seqLen+1] then
+      lastTime = tonumber(removeSpaces(split(ann[seqLen+1],' '))[1])
     end
 
     for j=3,#wave do
@@ -89,9 +90,7 @@ end
 size = #records
 shuffle = torch.randperm(size)
 input = torch.FloatTensor(size,1,650000,2)
-target = torch.IntTensor(size,1796)
-
-validRatio = 0.2
+target = torch.IntTensor(size,seqLen)
 
 for i=1,size do
   local idx = shuffle[i]
@@ -121,5 +120,5 @@ test = dp.DataSet{inputs=testInput,targets=testTarget,which_set='test'}
 ds = dp.DataSource{train_set=train,valid_set=valid,test_set=test}
 ds:classes{'Normal','Arrhythmia'}
 
-torch.save('HalfData',ds)
+torch.save('Len100',ds)
 
