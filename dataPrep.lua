@@ -5,7 +5,7 @@ records = {100,101,102,103,104,105,106,107,108,109,111,112,113,114,115,116,118,1
 wavePrefix = '/home/sid/Projects/HeartbeatNN/preprocessing/waveforms/'
 AnnPrefix = '/home/sid/Projects/HeartbeatNN/preprocessing/annotations/'
 validRatio = 0.2
-seqLen = 100
+seqLen = 450
 
 function split(str, pat)
    local t = {}  -- NOTE: use {n = 0} in Lua-5.0
@@ -90,7 +90,7 @@ end
 
 size = #records
 shuffle = torch.randperm(size)
-input = torch.FloatTensor(size,1,650000,2)
+input = torch.CudaTensor(size,1,650000,2)
 target = torch.CudaTensor(size,seqLen)
 
 for i=1,size do
@@ -121,5 +121,5 @@ test = dp.DataSet{inputs=testInput,targets=testTarget,which_set='test'}
 ds = dp.DataSource{train_set=train,valid_set=valid,test_set=test}
 ds:classes{'Normal','Arrhythmia'}
 
-torch.save('Len100',ds)
+torch.save('Len'..seqLen,ds)
 

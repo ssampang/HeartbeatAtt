@@ -34,7 +34,8 @@ function MultiVRReward:updateOutput(input, target)
    
    -- reward = scale when correctly classified
    self._reward = self._maxIdx.new()
-   self._reward:eq(self._maxIdx, target):sum(2)
+
+   self._reward:eq(self._maxIdx, target)
    self.reward = self.reward or input.new()
    self.reward:resize(self._reward:size(2)):copy(self._reward)
    self.reward:mul(self.scale)
@@ -59,6 +60,7 @@ function MultiVRReward:updateGradInput(inputTable, target)
       self.vrReward:div(input:size(1))
    end
    -- broadcast reward to modules
+--print(self.vrReward)
    self.module:reinforce(self.vrReward)  
    
    -- zero gradInput (this criterion has no gradInput for class pred)

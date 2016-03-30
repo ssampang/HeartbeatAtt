@@ -3,6 +3,7 @@ require 'rnn'
 require 'cutorch'
 dofile 'SpatialGlimpse1D.lua'
 dofile 'MultiVRReward.lua'
+dofile 'Recursor.lua'
 
 -- References :
 -- A. http://papers.nips.cc/paper/5542-recurrent-models-of-visual-attention.pdf
@@ -50,7 +51,7 @@ cmd:option('--locatorHiddenSize', 128, 'size of locator hidden layer')
 cmd:option('--imageHiddenSize', 256, 'size of hidden layer combining glimpse and locator hiddens')
 
 --[[ recurrent layer ]]--
-cmd:option('--rho', 100, 'back-propagate through time (BPTT) for rho time-steps')
+cmd:option('--rho', 450, 'back-propagate through time (BPTT) for rho time-steps')
 cmd:option('--hiddenSize', 64, 'number of hidden units used in Simple RNN.')
 cmd:option('--FastLSTM', false, 'use LSTM instead of linear layer')
 
@@ -80,7 +81,7 @@ if opt.dataset == 'TranslatedMnist' then
       opt.overwrite
    )
 else
-   ds = torch.load('Len100')
+   ds = torch.load('Len'..opt.rho)
 end
 
 --[[Saved experiment]]--
@@ -132,7 +133,7 @@ end
 
 
 -- recurrent neural network
-rnn = nn.Recurrent(opt.hiddenSize, glimpse, recurrent, nn[opt.transfer](), 100)
+rnn = nn.Recurrent(opt.hiddenSize, glimpse, recurrent, nn[opt.transfer](), opt.rho)
 
 -- actions (locator)
 locator = nn.Sequential()
@@ -224,7 +225,7 @@ train = dp.Optimizer{
       model:maxParamNorm(opt.maxOutNorm) -- affects params
       model:zeroGradParameters() -- affects gradParams
    end,
-   feedback = dp.Confusion{output_module=nn.SelectTable(1)},
+   feedback = nil,
    sampler = dp.ShuffleSampler{
       epoch_size = opt.trainEpochSize, batch_size = opt.batchSize
    },
@@ -233,13 +234,13 @@ train = dp.Optimizer{
 
 
 valid = dp.Evaluator{
-   feedback = dp.Confusion{output_module=nn.SelectTable(1)},
+   feedback = nil,
    sampler = dp.Sampler{epoch_size = opt.validEpochSize, batch_size = opt.batchSize},
    progress = opt.progress
 }
 if not opt.noTest then
    tester = dp.Evaluator{
-      feedback = dp.Confusion{output_module=nn.SelectTable(1)},
+      feedback = nil,
       sampler = dp.Sampler{batch_size = opt.batchSize}
    }
 end
@@ -250,15 +251,6 @@ xp = dp.Experiment{
    optimizer = train,
    validator = valid,
    tester = tester,
-   observer = {
-      ad,
-      dp.FileLogger(),
-      dp.EarlyStopper{
-         max_epochs = opt.maxTries,
-         error_report={'validator','feedback','confusion','accuracy'},
-         maximize = true
-      }
-   },
    random_seed = os.time(),
    max_epoch = opt.maxEpoch
 }
