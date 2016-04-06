@@ -37,7 +37,7 @@ function MultiVRReward:updateOutput(input, target)
 
    self._reward:eq(self._maxIdx, target)
    self.reward = self.reward or input.new()
-   self.reward:resize(self._reward:size(2)):copy(self._reward)
+   self.reward:resize(self._reward:size()):copy(self._reward)
    self.reward:mul(self.scale)
    
    -- loss = -sum(reward)
@@ -49,8 +49,8 @@ function MultiVRReward:updateOutput(input, target)
 end
 
 function MultiVRReward:updateGradInput(inputTable, target)
-   local input = self:toBatch(inputTable[1], 1)
-   local baseline = self:toBatch(inputTable[2], 1)
+   local input = self:toBatch(inputTable[1], 2)
+   local baseline = self:toBatch(inputTable[2], 2)
    
    -- reduce variance of reward using baseline
    self.vrReward = self.vrReward or self.reward.new()

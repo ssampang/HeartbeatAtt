@@ -25,7 +25,7 @@ cmd:option('--saturateEpoch', 800, 'epoch at which linear decayed LR will reach 
 cmd:option('--momentum', 0.9, 'momentum')
 cmd:option('--maxOutNorm', -1, 'max norm each layers output neuron weights')
 cmd:option('--cutoffNorm', -1, 'max l2-norm of contatenation of all gradParam tensors')
-cmd:option('--batchSize', 1, 'number of examples per batch')
+cmd:option('--batchSize', 20, 'number of examples per batch')
 cmd:option('--cuda', true, 'use CUDA')
 cmd:option('--useDevice', 1, 'sets the device (GPU) to use')
 cmd:option('--maxEpoch', 2000, 'maximum number of epochs to run')
@@ -37,8 +37,8 @@ cmd:option('--progress', false, 'print progress bar')
 cmd:option('--silent', false, 'dont print anything to stdout')
 
 --[[ reinforce ]]--
-cmd:option('--rewardScale', 1, "scale of positive reward (negative is 0)")
-cmd:option('--unitPixels', 325000, "the locator unit (1,1) maps to pixels (13,13), or (-1,-1) maps to (-13,-13)")
+cmd:option('--rewardScale', 0.25, "scale of positive reward (negative is 0)")
+cmd:option('--unitPixels', 405, "the locator unit (1,1) maps to pixels (13,13), or (-1,-1) maps to (-13,-13)")
 cmd:option('--locatorStd', 0.11, 'stdev of gaussian location sampler (between 0 and 1) (low values may cause NaNs)')
 cmd:option('--stochastic', false, 'Reinforce modules forward inputs stochastically during evaluation')
 
@@ -51,7 +51,7 @@ cmd:option('--locatorHiddenSize', 128, 'size of locator hidden layer')
 cmd:option('--imageHiddenSize', 256, 'size of hidden layer combining glimpse and locator hiddens')
 
 --[[ recurrent layer ]]--
-cmd:option('--rho', 450, 'back-propagate through time (BPTT) for rho time-steps')
+cmd:option('--rho', 4, 'back-propagate through time (BPTT) for rho time-steps')
 cmd:option('--hiddenSize', 64, 'number of hidden units used in Simple RNN.')
 cmd:option('--FastLSTM', false, 'use LSTM instead of linear layer')
 
@@ -167,12 +167,28 @@ classifier:add(nn.LogSoftMax())
 --end
 --agent:add( multipleActions )
 agent:add( nn.Sequencer( classifier ) )
-agent:add( nn.JoinTable(1,2) )
+agent:add( nn.JoinTable(2,2) )
+agent:add( nn.View(-1,opt.rho,#ds:classes()) )
 
 -- add the baseline reward predictor
 seq = nn.Sequential()
-seq:add(nn.Constant(1,1))
-seq:add(nn.Add(1))
+filler = torch.CudaTensor(opt.rho,1)
+for i=1,opt.rho do filler[i] = 1 end
+
+seq:add(nn.Constant(filler,2))
+
+bias = nn.Sequential()
+bias:add(nn.SplitTable(1,2))
+
+temp = nn.ParallelTable()
+for i=1,opt.rho do
+  temp:add(nn.Add(1))
+end
+bias:add(temp)
+bias:add(nn.JoinTable(2,2))
+bias:add(nn.View(-1,opt.rho,1))
+seq:add(bias)
+--seq:add(nn.Add(4))
 concat = nn.ConcatTable():add(nn.Identity()):add(seq)
 concat2 = nn.ConcatTable():add(nn.Identity()):add(concat)
 
