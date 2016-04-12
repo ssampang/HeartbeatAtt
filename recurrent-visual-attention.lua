@@ -4,6 +4,7 @@ require 'cutorch'
 dofile 'SpatialGlimpse1D.lua'
 dofile 'MultiVRReward.lua'
 dofile 'Recursor.lua'
+dofile 'ReinforceGamma.lua'
 
 -- References :
 -- A. http://papers.nips.cc/paper/5542-recurrent-models-of-visual-attention.pdf
@@ -39,7 +40,7 @@ cmd:option('--silent', false, 'dont print anything to stdout')
 --[[ reinforce ]]--
 cmd:option('--rewardScale', 0.25, "scale of positive reward (negative is 0)")
 cmd:option('--unitPixels', 405, "the locator unit (1,1) maps to pixels (13,13), or (-1,-1) maps to (-13,-13)")
-cmd:option('--locatorStd', 0.11, 'stdev of gaussian location sampler (between 0 and 1) (low values may cause NaNs)')
+cmd:option('--locatorStd', 15, 'stdev of gaussian location sampler (between 0 and 1) (low values may cause NaNs)')
 cmd:option('--stochastic', false, 'Reinforce modules forward inputs stochastically during evaluation')
 
 --[[ glimpse layer ]]--
@@ -139,8 +140,12 @@ rnn = nn.Recurrent(opt.hiddenSize, glimpse, recurrent, nn[opt.transfer](), opt.r
 locator = nn.Sequential()
 locator:add(nn.Linear(opt.hiddenSize, glimpseAxes))
 locator:add(nn.HardTanh()) -- bounds mean between -1 and 1
-locator:add(nn.ReinforceNormal(2*opt.locatorStd, opt.stochastic)) -- sample from normal, uses REINFORCE learning rule
-assert(locator:get(3).stochastic == opt.stochastic, "Please update the dpnn package : luarocks install dpnn")
+locator:add(nn.AddConstant(1,true))
+locator:add(nn.MulConstant(0.5,true))
+locator:add(nn.ReinforceGamma(opt.locatorStd,47,386, opt.stochastic)) -- sample from normal, uses REINFORCE learning rule
+assert(locator:get(5).stochastic == opt.stochastic, "Please update the dpnn package : luarocks install dpnn")
+locator:add(nn.AddConstant(-1*opt.unitPixels,true))
+locator:add(nn.MulConstant(1/opt.unitPixels,true))
 locator:add(nn.HardTanh()) -- bounds sample between -1 and 1
 locator:add(nn.MulConstant(opt.unitPixels*2/ds:imageSize("w")))
 
