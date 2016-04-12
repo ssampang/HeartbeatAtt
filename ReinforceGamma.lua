@@ -24,6 +24,7 @@ function ReinforceGamma:__init(stdev,minVal,maxVal, stochastic)
 end
 
 function ReinforceGamma:updateOutput(input)
+   local input,lastOutput = unpack(input)
    local mean, stdev = input, self.stdev
    mean:mul(self.maxVal-self.minVal)
    mean:add(self.minVal)
@@ -64,6 +65,7 @@ function ReinforceGamma:updateOutput(input)
       self.output:copy(mean)
    end
 
+   self.output:add(lastOutput:cuda())
    return self.output
 end
 
@@ -75,7 +77,7 @@ function ReinforceGamma:updateGradInput(input, gradOutput)
    -- s : standard deviation (sigma) (stdev)
    -- k : shape parameter of gamma dist
    -- theta: scale parameter of gamma dist
-   
+   local input, lastOutput = unpack(input) 
    local mean, stdev = input, self.stdev
    local gradMean, gradStdev = self.gradInput, nil
    if torch.type(input) == 'table' then
@@ -105,7 +107,7 @@ function ReinforceGamma:updateGradInput(input, gradOutput)
    local scale = torch.cdiv(variance,mean)
 
    local dkdu = torch.cdiv(torch.mul(mean,2),variance)
-   local dRdk = torch.add( torch.add( cephes.digamma(shape:float()):cuda(),-1, torch.log(scale)), torch.log(self.output))
+   local dRdk = torch.add( torch.add( cephes.digamma(shape:float()):cuda(),-1, torch.log(scale)), torch.log(self.output:add(-1,lastOutput)))
    gradMean:cmul(dRdk,dkdu)
    gradMean:mul(self.maxVal-self.minVal)
    -- multiply by variance reduced reward
