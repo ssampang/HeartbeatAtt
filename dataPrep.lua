@@ -144,7 +144,7 @@ for i=1,#records do
       end
 
       if labels[output[1]] and labels[output[2]] and labels[output[3]] and labels[output[4]] then
-        temp = torch.CudaTensor(length,2):fill(0)
+        temp = torch.Tensor(length,2):fill(0)
         tempIndex = 1
 
         while waveIndex>3 and waveTime(wave[waveIndex-2]) >= startTime do
@@ -156,7 +156,7 @@ for i=1,#records do
         end
 
         while waveIndex+1<=#ann and waveTime(wave[waveIndex+1]) < endTime do
-          temp[tempIndex]:copy(torch.mean(torch.CudaTensor({waveSamples(wave[waveIndex]),waveSamples(wave[waveIndex+1])}),1))
+          temp[tempIndex]:copy(torch.mean(torch.Tensor({waveSamples(wave[waveIndex]),waveSamples(wave[waveIndex+1])}),1))
           tempIndex = tempIndex+1
           waveIndex = waveIndex+2
         end
@@ -170,7 +170,7 @@ for i=1,#records do
         
         beatDist[numAbnormalBeats] = beatDist[numAbnormalBeats] + 1
         waves[#waves+1] = temp
-        anns[#anns+1] = torch.CudaTensor(output)
+        anns[#anns+1] = torch.Tensor(output)
       else
         local numAbnormalBeats = 0
         for k=1,numBeats do

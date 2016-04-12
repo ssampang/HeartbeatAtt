@@ -37,7 +37,7 @@ function ReinforceGamma:updateOutput(input)
    self.output:resizeAs(mean)
    
    if self.stochastic or self.train ~= false then
-      local variance = torch.CudaTensor()
+      local variance = mean.new()
 
       if torch.type(stdev) == 'number' then
         variance:pow(variance:resizeAs(mean):fill(stdev),2)
@@ -91,7 +91,7 @@ function ReinforceGamma:updateGradInput(input, gradOutput)
    
    gradMean:resizeAs(mean)
 
-   local variance = torch.CudaTensor()
+   local variance = mean.new()
    if torch.type(stdev) == 'number' then
       variance:pow(variance:resizeAs(mean):fill(stdev),2)
    else
@@ -105,7 +105,8 @@ function ReinforceGamma:updateGradInput(input, gradOutput)
    local scale = torch.cdiv(variance,mean)
 
    local dkdu = torch.cdiv(torch.mul(mean,2),variance)
-   local dRdk = torch.add( torch.add( cephes.digamma(shape:float()):cuda(),-1, torch.log(scale)), torch.log(self.output))
+   local digammaOutput = variance.new():resizeAs(shape):copy(cephes.digamma(shape:float()))
+   local dRdk = torch.add( torch.add( digammaOutput,-1, torch.log(scale)), torch.log(self.output))
    gradMean:cmul(dRdk,dkdu)
    gradMean:mul(self.maxVal-self.minVal)
    -- multiply by variance reduced reward

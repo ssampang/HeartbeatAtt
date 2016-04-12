@@ -113,7 +113,7 @@ locationSensor:add(nn.Linear(glimpseAxes, opt.locatorHiddenSize))
 locationSensor:add(nn[opt.transfer]())
 
 glimpseSensor = nn.Sequential()
-glimpseSensor:add(nn.DontCast(nn.SpatialGlimpse1D(opt.glimpsePatchSize, opt.glimpseDepth, opt.glimpseScale):float(),true))
+glimpseSensor:add(nn.DontCast(nn.SpatialGlimpse1D(opt.glimpsePatchSize, opt.glimpseDepth, opt.glimpseScale),true))
 glimpseSensor:add(nn.Collapse(3))
 glimpseSensor:add(nn.Linear(ds:imageSize('c')*(opt.glimpsePatchSize[1]*opt.glimpsePatchSize[2])*opt.glimpseDepth, opt.glimpseHiddenSize))
 glimpseSensor:add(nn[opt.transfer]())
@@ -177,10 +177,7 @@ agent:add( nn.View(-1,opt.rho,#ds:classes()) )
 
 -- add the baseline reward predictor
 seq = nn.Sequential()
-filler = torch.CudaTensor(opt.rho,1)
-for i=1,opt.rho do filler[i] = 1 end
-
-seq:add(nn.Constant(filler,2))
+seq:add(nn.Constant(torch.Tensor(opt.rho,1):fill(1),2))
 
 bias = nn.Sequential()
 bias:add(nn.SplitTable(1,2))
