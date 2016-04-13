@@ -142,8 +142,7 @@ locator:add(nn.Linear(opt.hiddenSize, glimpseAxes))
 locator:add(nn.HardTanh()) -- bounds mean between -1 and 1
 locator:add(nn.AddConstant(1,true))
 locator:add(nn.MulConstant(0.5,true))
-locator:add(nn.ReinforceGamma(opt.locatorStd,47,386, opt.stochastic)) -- sample from normal, uses REINFORCE learning rule
-assert(locator:get(5).stochastic == opt.stochastic, "Please update the dpnn package : luarocks install dpnn")
+locator:add(nn.Recurrence(nn.ReinforceGamma(opt.locatorStd,47,386, opt.stochastic),1,1)) -- sample from normal, uses REINFORCE learning rule
 locator:add(nn.AddConstant(-1*opt.unitPixels,true))
 locator:add(nn.MulConstant(1/opt.unitPixels,true))
 locator:add(nn.HardTanh()) -- bounds sample between -1 and 1
