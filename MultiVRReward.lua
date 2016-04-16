@@ -61,7 +61,12 @@ function MultiVRReward:updateGradInput(inputTable, target)
    end
    -- broadcast reward to modules
 --print(self.vrReward)
-   self.module:reinforce(self.vrReward)  
+   local reward = self.vrReward:transpose(1,2)
+   local res = {}
+   for i=1,reward:size(1) do
+      res[i] = reward[i]:squeeze():contiguous()
+   end
+   self.module:reinforce(res)  
    
    -- zero gradInput (this criterion has no gradInput for class pred)
    self.gradInput[1]:resizeAs(input):zero()

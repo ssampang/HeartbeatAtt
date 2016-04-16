@@ -3,7 +3,6 @@ require 'rnn'
 require 'cutorch'
 dofile 'SpatialGlimpse1D.lua'
 dofile 'MultiVRReward.lua'
-dofile 'Recursor.lua'
 dofile 'ReinforceGamma.lua'
 
 -- References :
@@ -139,10 +138,26 @@ rnn = nn.Recurrent(opt.hiddenSize, glimpse, recurrent, nn[opt.transfer](), opt.r
 -- actions (locator)
 locator = nn.Sequential()
 locator:add(nn.Linear(opt.hiddenSize, glimpseAxes))
-locator:add(nn.HardTanh()) -- bounds mean between -1 and 1
-locator:add(nn.AddConstant(1,true))
-locator:add(nn.MulConstant(0.5,true))
-locator:add(nn.Recurrence(nn.ReinforceGamma(opt.locatorStd,47,386, opt.stochastic),1,1)) -- sample from normal, uses REINFORCE learning rule
+locator:add(nn.Sigmoid())
+
+-- transform mean and stdev to {shape,scale} params of gamma dist
+   --          mu^2            sigma^2
+   -- shape = -------  scale = -------
+   --         sigma^2            mu
+
+transform = nn.Sequential()
+transform:add( nn.MulConstant(386-47,true) )
+transform:add( nn.AddConstant(47,true) )
+var = nn.Sequential()
+var:add(nn.Constant(15,1))
+var:add(nn.Power(2))
+transform:add( nn.ConcatTable():add(nn.Power(2)):add(var):add(nn.Identity()) )
+transform:add( nn.ConcatTable():add( nn.NarrowTable(1,2) ):add( nn.NarrowTable(2,2) ) )
+transform:add( nn.ParallelTable():add( nn.CDivTable() ):add(nn.CDivTable() ) )
+transform:add( nn.ReinforceGamma() )
+
+locator:add( nn.Recurrent( glimpseAxes, transform, nn.Identity(), nn.Identity()) ) 
+locator.modules[1].bias = torch.zeros(glimpseAxes)
 locator:add(nn.AddConstant(-1*opt.unitPixels,true))
 locator:add(nn.MulConstant(1/opt.unitPixels,true))
 locator:add(nn.HardTanh()) -- bounds sample between -1 and 1
@@ -212,12 +227,16 @@ opt.decayFactor = (opt.minLR - opt.learningRate)/opt.saturateEpoch
 --  backprop:add( nn.ClassNLLCriterion())
 --end
 
+ugh = nn.Sequential()
+ugh:add(nn.View(1))
+ugh:add(nn.Squeeze())
+
 train = dp.Optimizer{
 -- split up each action into elements of a table, and split up each target into elements of a table, and apply ClassNLLCriterion to each
 -- pair of elements
 
    loss = nn.ParallelCriterion(true)
-      :add(nn.ModuleCriterion(nn.SequencerCriterion(nn.ClassNLLCriterion()), nn.SplitTable(1,2), nn.SplitTable(1,1))) -- BACKPROP
+      :add(nn.ModuleCriterion(nn.SequencerCriterion(nn.ClassNLLCriterion(torch.Tensor{.01,.99})), nn.SplitTable(1,2), nn.SplitTable(1,1))) -- BACKPROP
       :add(nn.ModuleCriterion(nn.MultiVRReward(agent, opt.rewardScale), nil, nn.Convert())) -- REINFORCE
    ,
    epoch_callback = function(model, report) -- called every epoch
